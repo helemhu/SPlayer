@@ -2,14 +2,15 @@ import { useDataStore, useSettingStore, useShortcutStore, useStatusStore } from 
 import { useEventListener } from "@vueuse/core";
 import { openUserAgreement } from "@/utils/modal";
 import { debounce } from "lodash-es";
-import { isElectron } from "./helper";
+import { isElectron } from "./env";
+import { usePlayer } from "@/utils/player";
 import packageJson from "@/../package.json";
-import player from "@/utils/player";
 import log from "./log";
 
 // 应用初始化时需要执行的操作
 const init = async () => {
   // init pinia-data
+  const player = usePlayer();
   const dataStore = useDataStore();
   const statusStore = useStatusStore();
   const settingStore = useSettingStore();
@@ -25,6 +26,7 @@ const init = async () => {
 
   // 加载数据
   await dataStore.loadData();
+
   // 初始化播放器
   player.initPlayer(
     settingStore.autoPlay,
@@ -32,6 +34,10 @@ const init = async () => {
   );
   // 同步播放模式
   player.playModeSyncIpc();
+  // 初始化自动关闭定时器
+  if (statusStore.autoClose.enable) {
+    player.startAutoCloseTimer(statusStore.autoClose.time, statusStore.autoClose.remainTime);
+  }
 
   if (isElectron) {
     // 注册全局快捷键
@@ -39,7 +45,7 @@ const init = async () => {
     // 显示窗口
     window.electron.ipcRenderer.send("win-loaded");
     // 显示桌面歌词
-    window.electron.ipcRenderer.send("change-desktop-lyric", statusStore.showDesktopLyric);
+    window.electron.ipcRenderer.send("toggle-desktop-lyric", statusStore.showDesktopLyric);
     // 检查更新
     if (settingStore.checkUpdateOnStart) window.electron.ipcRenderer.send("check-update");
   }
@@ -53,6 +59,7 @@ const initEventListener = () => {
 
 // 键盘事件
 const keyDownEvent = debounce((event: KeyboardEvent) => {
+  const player = usePlayer();
   const shortcutStore = useShortcutStore();
   const target = event.target as HTMLElement;
   // 排除元素
